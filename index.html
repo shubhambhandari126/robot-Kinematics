@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot Arm Studio — Kinematics</title>
+<style>
+  :root{
+    --bg:#ffffff; --panel:#f5f8fd; --ink:#0b1324; --muted:#586074; --faint:#98a1b4;
+    --line:#e6ebf3; --line2:#d4dbe8; --blue:#1857d6; --bluedark:#0f3fa6; --bluesoft:#eaf1fe; --blueborder:#c2d6fb;
+    --shadow:0 1px 2px rgba(11,19,36,.04),0 10px 30px rgba(11,19,36,.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 20px 60px}
+  .brand{display:flex;align-items:center;gap:11px;margin-bottom:4px}
+  .logo{width:40px;height:40px;border-radius:11px;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:21px;box-shadow:var(--shadow)}
+  h1{font-size:24px;margin:0;letter-spacing:-.4px}
+  .tagline{color:var(--muted);font-size:15px;margin:0 0 16px 51px}
+  @media(max-width:560px){.tagline{margin-left:0}}
+  .card{background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .explain{background:var(--bluesoft);border:1px solid var(--blueborder);color:#123a86;font-size:14px}
+  .explain b{color:var(--bluedark)}
+  canvas{width:100%;height:auto;display:block;border-radius:12px;cursor:crosshair;touch-action:none}
+  .modebar{display:inline-flex;background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:4px;gap:4px;margin-bottom:12px}
+  .modebar button{border:0;background:transparent;padding:9px 18px;border-radius:9px;font-size:14px;font-weight:650;color:#3f4863;cursor:pointer}
+  .modebar button.active{background:var(--blue);color:#fff}
+  .liveline{background:#0b1324;color:#dce8ff;border-radius:10px;padding:10px 13px;font-size:13px;margin:12px 0;font-family:ui-monospace,Menlo,monospace}
+  .liveline b{color:#7fb0ff}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;margin-top:4px}
+  @media(max-width:560px){.controls{grid-template-columns:1fr}}
+  .ctl label{font-size:13px;font-weight:600;color:var(--ink);display:flex;justify-content:space-between}
+  .ctl label span{color:var(--blue);font-family:ui-monospace,Menlo,monospace}
+  input[type=range]{width:100%;margin-top:6px;accent-color:var(--blue)}
+  .btn{border:0;border-radius:10px;padding:9px 15px;font-size:13.5px;font-weight:650;cursor:pointer;color:#fff;background:var(--blue)}
+  .btn:hover{background:var(--bluedark)}
+  .btn.ghost{background:var(--panel);color:#3f4863;border:1px solid var(--line2)}
+  .btn.ghost.on{background:var(--bluesoft);color:var(--bluedark);border-color:var(--blueborder)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .hint{font-size:12.5px;color:var(--muted)}
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+  @media(max-width:560px){.stat{grid-template-columns:1fr 1fr}}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  .pill .k{font-size:11px;color:var(--muted);font-weight:600}
+  .pill .v{font-size:16px;font-weight:750;margin-top:2px}
+  .ok{color:#15a34a}.no{color:#dc3546}
+  .sectitle{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--faint);margin:16px 0 8px}
+  #fkPanel{display:none}#fkPanel.show{display:block}#ikPanel.hide{display:none}
+  .foot{color:var(--faint);font-size:12.5px;margin-top:20px;line-height:1.65}
+  .foot b{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><div class="logo">&#129302;</div><h1>Robot Arm Studio</h1></div>
+  <p class="tagline">Drive the hand (IK) or the joints (FK), set joint limits, dodge an obstacle, and run a real pick-and-place task.</p>
+
+  <div class="card explain">
+    <b>Two directions of robot motion.</b> <b>Forward kinematics (FK):</b> you set joint angles, the hand ends up wherever that puts it. <b>Inverse kinematics (IK):</b> you pick where the hand should go, the robot solves every joint. Switch modes to feel the difference. Then try <b>joint limits</b> (real motors can't spin freely), an <b>obstacle</b>, and the <b>pick &amp; place</b> task, the actual job robots do.
+  </div>
+
+  <div class="card">
+    <div class="modebar">
+      <button id="mIK" class="active">Reach &nbsp;&middot;&nbsp; IK</button>
+      <button id="mFK">Pose &nbsp;&middot;&nbsp; FK</button>
+    </div>
+    <canvas id="cv" width="820" height="500"></canvas>
+    <div class="liveline" id="live">&#9654; Drag the green target. The arm solves its joints to reach it.</div>
+
+    <div class="controls">
+      <div class="ctl"><label>Joints (DoF) <span id="segOut">4</span></label><input id="seg" type="range" min="2" max="8" value="4" step="1"></div>
+      <div class="ctl"><label>Segment length <span id="lenOut">78 px</span></label><input id="len" type="range" min="40" max="120" value="78" step="1"></div>
+    </div>
+
+    <div id="ikPanel">
+      <div class="row">
+        <button class="btn ghost" id="task">Pick &amp; place task</button>
+        <button class="btn ghost" id="obstacle">Obstacle: OFF</button>
+        <button class="btn ghost" id="limits">Joint limits: OFF</button>
+        <button class="btn ghost" id="trace">Trace shape</button>
+        <button class="btn ghost" id="trail">Trail: OFF</button>
+        <button class="btn ghost" id="reset">Reset</button>
+      </div>
+      <div class="hint" style="margin-top:8px">Drag on the canvas to move the target.</div>
+    </div>
+
+    <div id="fkPanel">
+      <div class="sectitle">Joint angle sliders (you drive each joint)</div>
+      <div id="fkSliders"></div>
+    </div>
+
+    <div class="stat">
+      <div class="pill"><div class="k">Hand (x, y)</div><div class="v" id="eePos">--</div></div>
+      <div class="pill"><div class="k">Reach used</div><div class="v" id="reachPct">--</div></div>
+      <div class="pill"><div class="k">Solve iters</div><div class="v" id="iters">--</div></div>
+      <div class="pill"><div class="k">Status</div><div class="v" id="status">--</div></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <b>Why this matters.</b> Pick-and-place is <i>the</i> warehouse task; trajectory tracing is how robots weld or draw; joint limits and obstacle avoidance are what separate a sim from a real deployable arm. This 2D studio runs the same FABRIK inverse-kinematics core that real planners build on, in your browser.
+  </div>
+</div>
+
+<script>
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height,GROUND=H-48;
+let nSeg=4,segLen=78,mode='ik';
+const base={x:W/2,y:GROUND};
+let points=[],lengths=[],fkAngles=[];
+let target={x:W*0.66,y:H*0.52},smooth={x:target.x,y:target.y};
+let tracing=false,trailOn=false,trail=[],tt=0,lastIters=0;
+let obstacleOn=false, obस={x:W*0.34,y:H*0.5,r:46};
+let obst={x:W*0.34,y:H*0.52,r:46};
+let limitsOn=false, maxDeg=120;
+let taskOn=false, block=null, goal=null, grabbed=false, done=false;
+
+function d(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function tot(){return segLen*nSeg;}
+function initArm(){points=[{x:base.x,y:base.y}];lengths=[];fkAngles=[];for(let i=0;i<nSeg;i++){points.push({x:base.x,y:base.y-segLen*(i+1)});lengths.push(segLen);fkAngles.push(0);}buildFK();}
+
+function solveFABRIK(tg){
+  const total=tot(),dd=d(base,tg); let it=0;
+  if(dd>total){for(let i=0;i<nSeg;i++){const r=d(points[i],tg),l=lengths[i]/r;points[i+1]={x:points[i].x*(1-l)+tg.x*l,y:points[i].y*(1-l)+tg.y*l};}lastIters=1;return false;}
+  const b={x:base.x,y:base.y};
+  while(d(points[nSeg],tg)>0.4&&it<20){
+    points[nSeg]={x:tg.x,y:tg.y};
+    for(let i=nSeg-1;i>=0;i--){const r=d(points[i+1],points[i]),l=lengths[i]/r;points[i]={x:points[i+1].x*(1-l)+points[i].x*l,y:points[i+1].y*(1-l)+points[i].y*l};}
+    points[0]={x:b.x,y:b.y};
+    for(let i=0;i<nSeg;i++){const r=d(points[i],points[i+1]),l=lengths[i]/r;points[i+1]={x:points[i].x*(1-l)+points[i+1].x*l,y:points[i].y*(1-l)+points[i+1].y*l};}
+    it++;
+  }
+  lastIters=it;
+  if(limitsOn)applyLimits();
+  return true;
+}
+function applyLimits(){
+  // rebuild from clamped relative angles
+  let prev=-Math.PI/2; const mx=maxDeg*Math.PI/180; const np=[{x:base.x,y:base.y}];
+  for(let i=0;i<nSeg;i++){
+    let a=Math.atan2(points[i+1].y-points[i].y,points[i+1].x-points[i].x);
+    let rel=a-prev; while(rel>Math.PI)rel-=2*Math.PI; while(rel<-Math.PI)rel+=2*Math.PI;
+    rel=Math.max(-mx,Math.min(mx,rel)); const abs=prev+rel;
+    np.push({x:np[i].x+Math.cos(abs)*lengths[i],y:np[i].y+Math.sin(abs)*lengths[i]}); prev=abs;
+  }
+  points=np;
+}
+function forward(){let ang=-Math.PI/2;points=[{x:base.x,y:base.y}];for(let i=0;i<nSeg;i++){ang+=fkAngles[i];points.push({x:points[i].x+Math.cos(ang)*lengths[i],y:points[i].y+Math.sin(ang)*lengths[i]});}}
+function deriveFK(){let prev=-Math.PI/2;for(let i=0;i<nSeg;i++){let a=Math.atan2(points[i+1].y-points[i].y,points[i+1].x-points[i].x);let rel=a-prev;while(rel>Math.PI)rel-=2*Math.PI;while(rel<-Math.PI)rel+=2*Math.PI;fkAngles[i]=rel;prev=a;}buildFK();}
+function buildFK(){const box=document.getElementById('fkSliders');if(!box)return;box.innerHTML='';const g=document.createElement('div');g.className='controls';for(let i=0;i<nSeg;i++){const deg=Math.round(fkAngles[i]*180/Math.PI);const w=document.createElement('div');w.className='ctl';w.innerHTML='<label>Joint '+(i+1)+' <span id="fo'+i+'">'+deg+'°</span></label><input type="range" min="-150" max="150" value="'+deg+'" data-j="'+i+'">';g.appendChild(w);}box.appendChild(g);box.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',e=>{const j=+e.target.dataset.j;fkAngles[j]=(+e.target.value)*Math.PI/180;document.getElementById('fo'+j).textContent=e.target.value+'°';}));}
+
+function capsule(a,b,wd,col){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.strokeStyle=col;ctx.lineWidth=wd;ctx.lineCap="round";ctx.stroke();}
+
+function draw(reach){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="#fbfcff";ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle="#eef2fb";ctx.lineWidth=1;for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  // workspace
+  ctx.beginPath();ctx.arc(base.x,base.y,tot(),Math.PI,2*Math.PI);ctx.strokeStyle="#d4e0f7";ctx.lineWidth=1.5;ctx.setLineDash([5,5]);ctx.stroke();ctx.setLineDash([]);
+  // ground + shadow
+  ctx.fillStyle="rgba(11,19,36,.06)";ctx.beginPath();ctx.ellipse(base.x,GROUND+8,tot()*0.5,10,0,0,7);ctx.fill();
+  ctx.strokeStyle="#c6cede";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,GROUND);ctx.lineTo(W,GROUND);ctx.stroke();
+  // obstacle
+  if(obstacleOn){ctx.beginPath();ctx.arc(obst.x,obst.y,obst.r,0,7);ctx.fillStyle="#fdeaec";ctx.fill();ctx.strokeStyle="#dc3546";ctx.lineWidth=2;ctx.setLineDash([6,5]);ctx.stroke();ctx.setLineDash([]);}
+  // goal + block
+  if(taskOn){
+    ctx.beginPath();ctx.arc(goal.x,goal.y,goal.r,0,7);ctx.fillStyle=done?"rgba(21,163,74,.14)":"rgba(21,163,74,.07)";ctx.fill();ctx.strokeStyle="#15a34a";ctx.lineWidth=2;ctx.setLineDash([6,5]);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle="#f0997b";ctx.strokeStyle="#993c1d";ctx.lineWidth=2;ctx.fillRect(block.x-13,block.y-13,26,26);ctx.strokeRect(block.x-13,block.y-13,26,26);
+  }
+  // trail
+  if(trail.length>1){for(let i=1;i<trail.length;i++){ctx.globalAlpha=i/trail.length*0.85;capsule(trail[i-1],trail[i],2.5,"#f0997b");}ctx.globalAlpha=1;}
+  // target
+  if(mode==='ik'&&!taskOn){ctx.beginPath();ctx.arc(smooth.x,smooth.y,11,0,7);ctx.strokeStyle=reach?"#15a34a":"#dc3546";ctx.lineWidth=2.5;ctx.stroke();ctx.beginPath();ctx.arc(smooth.x,smooth.y,3,0,7);ctx.fillStyle=reach?"#15a34a":"#dc3546";ctx.fill();}
+  // angle arcs
+  for(let i=0;i<nSeg;i++){const p=i===0?-Math.PI/2:Math.atan2(points[i].y-points[i-1].y,points[i].x-points[i-1].x);const c=Math.atan2(points[i+1].y-points[i].y,points[i+1].x-points[i].x);ctx.beginPath();ctx.arc(points[i].x,points[i].y,15,Math.min(p,c),Math.max(p,c));ctx.strokeStyle="rgba(24,87,214,.3)";ctx.lineWidth=3;ctx.stroke();}
+  // segments metallic (dark edge + body + highlight)
+  for(let i=0;i<nSeg;i++){capsule(points[i],points[i+1],14,"#0c2050");capsule(points[i],points[i+1],10,"#1857d6");capsule(points[i],points[i+1],3.5,"#8fb3f5");}
+  // gripper (drawn before the wrist housing so housing sits on top)
+  const h=points[nSeg],pr=points[nSeg-1];
+  const ang=Math.atan2(h.y-pr.y,h.x-pr.x), open=(grabbed?6:12);
+  const px=Math.cos(ang),py=Math.sin(ang),nx=Math.cos(ang+Math.PI/2),ny=Math.sin(ang+Math.PI/2);
+  capsule({x:h.x-nx*open,y:h.y-ny*open},{x:h.x+nx*open,y:h.y+ny*open},6,"#0f3fa6"); // palm bar
+  for(const s of [1,-1]){const bx=h.x+nx*open*s,by=h.y+ny*open*s;capsule({x:bx,y:by},{x:bx+px*16,y:by+py*16},5,"#0f3fa6");} // fingers
+  // joints as motor housings
+  for(let i=0;i<=nSeg;i++){
+    ctx.beginPath();ctx.arc(points[i].x,points[i].y,i===nSeg?12:11,0,7);ctx.fillStyle="#d4dcec";ctx.fill();ctx.strokeStyle="#8793ad";ctx.lineWidth=1.5;ctx.stroke();
+    ctx.beginPath();ctx.arc(points[i].x,points[i].y,i===nSeg?6:5.5,0,7);ctx.fillStyle=i===nSeg?"#0f3fa6":"#ffffff";ctx.fill();ctx.strokeStyle="#0b1324";ctx.lineWidth=2;ctx.stroke();
+    ctx.beginPath();ctx.arc(points[i].x,points[i].y,1.5,0,7);ctx.fillStyle="#0b1324";ctx.fill();
+  }
+  // base pedestal with mounting bolts
+  ctx.fillStyle="#0b1324";ctx.fillRect(base.x-42,GROUND,84,30);
+  ctx.fillStyle="#2a3550";ctx.fillRect(base.x-26,GROUND-16,52,18);
+  ctx.fillStyle="#7a86a0";for(const bx of [-32,-11,11,32]){ctx.beginPath();ctx.arc(base.x+bx,GROUND+15,2.6,0,7);ctx.fill();}
+}
+
+function readout(reach){
+  const ee=points[nSeg];
+  document.getElementById('eePos').textContent=Math.round(ee.x-base.x)+", "+Math.round(base.y-ee.y);
+  document.getElementById('reachPct').textContent=Math.round(d(base,ee)/tot()*100)+"%";
+  document.getElementById('iters').textContent=mode==='ik'?lastIters:"—";
+  const s=document.getElementById('status');
+  if(done){s.textContent="Done!";s.className="v ok";}
+  else if(mode==='fk'){s.textContent="FK mode";s.className="v";}
+  else{s.textContent=reach?"In reach":"Too far";s.className="v "+(reach?"ok":"no");}
+}
+function setLive(t){document.getElementById('live').innerHTML=t;}
+
+function loop(){
+  let reach=true;
+  if(mode==='ik'){
+    let tg=smooth;
+    if(taskOn){
+      const hand=points[nSeg];
+      if(!grabbed&&!done&&d(hand,block)<22){grabbed=true;setLive("&#9654; <b>Grabbed</b> the block. Now drag it to the green zone.");}
+      if(grabbed){block.x=hand.x;block.y=hand.y;if(d(block,goal)<goal.r-6){grabbed=false;done=true;block.x=goal.x;block.y=goal.y;setLive("&#9989; <b>Task complete</b> — block placed in the goal. That's pick-and-place.");}}
+    }
+    if(tracing){tt+=0.02;const R=tot()*0.6;smooth.x=base.x+Math.sin(tt*2)*R;smooth.y=base.y-(H*0.34)-Math.cos(tt)*R*0.5;}
+    else{smooth.x+=(target.x-smooth.x)*0.22;smooth.y+=(target.y-smooth.y)*0.22;}
+    // keep target above ground + out of obstacle
+    if(smooth.y>GROUND-5)smooth.y=GROUND-5;
+    if(obstacleOn){const dx=smooth.x-obst.x,dy=smooth.y-obst.y,dist=Math.hypot(dx,dy);if(dist<obst.r+6){const s=(obst.r+6)/dist;smooth.x=obst.x+dx*s;smooth.y=obst.y+dy*s;}}
+    reach=solveFABRIK(smooth);
+    if(trailOn){trail.push({x:points[nSeg].x,y:points[nSeg].y});if(trail.length>170)trail.shift();}
+  } else forward();
+  draw(reach);readout(reach);
+  requestAnimationFrame(loop);
+}
+
+function setTarget(e){if(mode!=='ik')return;const r=cv.getBoundingClientRect(),sx=W/r.width,sy=H/r.height;target.x=((e.touches?e.touches[0].clientX:e.clientX)-r.left)*sx;target.y=((e.touches?e.touches[0].clientY:e.clientY)-r.top)*sy;tracing=false;document.getElementById('trace').classList.remove('on');document.getElementById('trace').textContent="Trace shape";}
+let drag=false;
+cv.addEventListener('mousedown',e=>{drag=true;setTarget(e);});cv.addEventListener('mousemove',e=>{if(drag)setTarget(e);});window.addEventListener('mouseup',()=>drag=false);
+cv.addEventListener('touchstart',e=>{setTarget(e);e.preventDefault();});cv.addEventListener('touchmove',e=>{setTarget(e);e.preventDefault();});
+
+document.getElementById('seg').addEventListener('input',e=>{nSeg=+e.target.value;document.getElementById('segOut').textContent=nSeg;trail=[];initArm();});
+document.getElementById('len').addEventListener('input',e=>{segLen=+e.target.value;document.getElementById('lenOut').textContent=segLen+" px";trail=[];initArm();});
+document.getElementById('obstacle').addEventListener('click',e=>{obstacleOn=!obstacleOn;e.target.classList.toggle('on',obstacleOn);e.target.textContent="Obstacle: "+(obstacleOn?"ON":"OFF");setLive(obstacleOn?"&#9654; Red zone is a no-go area — the target can't enter it.":"&#9654; Drag the green target.");});
+document.getElementById('limits').addEventListener('click',e=>{limitsOn=!limitsOn;e.target.classList.toggle('on',limitsOn);e.target.textContent="Joint limits: "+(limitsOn?"ON (±120°)":"OFF");setLive(limitsOn?"&#9654; Joint limits ON — each joint can't bend past ±120°, like a real motor.":"&#9654; Joint limits off — joints bend freely.");});
+document.getElementById('trace').addEventListener('click',e=>{tracing=!tracing;e.target.classList.toggle('on',tracing);e.target.textContent=tracing?"Tracing...":"Trace shape";if(tracing){trailOn=true;const tb=document.getElementById('trail');tb.classList.add('on');tb.textContent="Trail: ON";trail=[];setLive("&#9654; <b>Trajectory following</b> — the hand traces a path (how robots weld or draw).");}});
+document.getElementById('trail').addEventListener('click',e=>{trailOn=!trailOn;e.target.classList.toggle('on',trailOn);e.target.textContent="Trail: "+(trailOn?"ON":"OFF");if(!trailOn)trail=[];});
+document.getElementById('task').addEventListener('click',e=>{taskOn=!taskOn;e.target.classList.toggle('on',taskOn);if(taskOn){block={x:base.x-tot()*0.55,y:GROUND-20};goal={x:base.x+tot()*0.5,y:H*0.36,r:30};grabbed=false;done=false;setLive("&#9654; <b>Pick &amp; place:</b> drag the hand to the orange block to grab it, then carry it to the green zone.");}else{setLive("&#9654; Drag the green target.");}});
+document.getElementById('reset').addEventListener('click',()=>{target={x:W*0.66,y:H*0.52};tracing=false;trail=[];done=false;grabbed=false;if(taskOn){block={x:base.x-tot()*0.55,y:GROUND-20};}document.getElementById('trace').classList.remove('on');document.getElementById('trace').textContent="Trace shape";initArm();});
+
+function setMode(m){mode=m;document.getElementById('mIK').classList.toggle('active',m==='ik');document.getElementById('mFK').classList.toggle('active',m==='fk');document.getElementById('ikPanel').classList.toggle('hide',m!=='ik');document.getElementById('fkPanel').classList.toggle('show',m==='fk');if(m==='fk'){deriveFK();tracing=false;taskOn=false;document.getElementById('task').classList.remove('on');setLive("&#9654; <b>FK mode:</b> drag each joint slider. Notice how hard it is to aim the hand this way.");}else setLive("&#9654; Drag the green target. The arm solves its joints to reach it.");trail=[];}
+document.getElementById('mIK').addEventListener('click',()=>setMode('ik'));
+document.getElementById('mFK').addEventListener('click',()=>setMode('fk'));
+
+initArm();loop();
+</script>
+</body>
+</html>
